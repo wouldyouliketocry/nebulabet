@@ -5,10 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NebulaBet — Galaxy Casino</title>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Exo+2:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<!-- Firebase SDKs (synchronous, load before everything) -->
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 <style>
 :root{
   --bg:#03040e;--bg2:#07091a;--bg3:#0b0e22;
@@ -5363,44 +5359,68 @@ function tryShowDailyBonus(){
   if(dailyState.lastClaim!==today && settings.dailyReminder) openDailyBonus();
 }
 
-// ── BOOT FIREBASE ──
-// Firebase SDK scripts are loaded synchronously in <head>,
-// so firebase is available immediately here.
+// ── BOOT FIREBASE via dynamic script injection ──
+// This works on file://, GitHub Pages, and any https:// host.
 (function bootFirebase() {
-  try {
-    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-    fbAuth = firebase.auth();
-    fbDb   = firebase.database();
-    window.fbAuth = fbAuth;
-    window.fbDb   = fbDb;
-    // Watch auth state
-    fbAuth.onAuthStateChanged(function(user) {
-      if (user) {
-        currentUser = user;
-        window.currentUser = user;
-        fbDb.ref('users/'+user.uid+'/username').once('value').then(function(snap) {
-          currentUsername = snap.val() || 'Player';
-          window.currentUsername = currentUsername;
-          onLoggedIn();
-        });
-      } else {
-        currentUser = null;
-        window.currentUser = null;
-        currentUsername = '';
-        window.currentUsername = '';
-        onLoggedOut();
-      }
-    });
-  } catch(e) {
-    console.error('Firebase init error:', e);
-    document.getElementById('authScreen').innerHTML =
-      '<div style="color:#f87171;font-family:Orbitron,monospace;font-size:1.1rem;padding:60px 30px;text-align:center;max-width:500px;margin:0 auto">'
-      +'<div style="font-size:3rem;margin-bottom:16px">⚠️</div>'
-      +'<div style="font-family:Orbitron,monospace;font-weight:700;margin-bottom:12px">Firebase Connection Error</div>'
-      +'<div style="color:#94a3b8;font-size:.9rem;margin-bottom:20px">'+e.message+'</div>'
-      +'<button onclick="location.reload()" style="background:#8b5cf6;color:#fff;border:none;padding:12px 28px;border-radius:12px;font-family:Orbitron,monospace;font-size:.85rem;cursor:pointer;font-weight:700">🔄 Reload Page</button>'
-      +'</div>';
+  var SCRIPTS = [
+    'https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js',
+    'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js',
+    'https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js'
+  ];
+
+  function showFbError(msg) {
+    var el = document.getElementById('authScreen');
+    if (!el) return;
+    el.innerHTML =
+      '<div style="color:#f87171;font-family:Orbitron,monospace;font-size:1rem;padding:60px 20px;text-align:center;max-width:480px;margin:0 auto">'
+      + '<div style="font-size:3rem;margin-bottom:16px">⚠️</div>'
+      + '<div style="font-weight:700;margin-bottom:10px">Firebase Connection Error</div>'
+      + '<div style="color:#94a3b8;font-size:.85rem;margin-bottom:24px">'+msg+'</div>'
+      + '<button onclick="location.reload()" style="background:#8b5cf6;color:#fff;border:none;padding:12px 28px;border-radius:12px;font-family:Orbitron,monospace;font-size:.82rem;cursor:pointer;font-weight:700">🔄 Reload Page</button>'
+      + '</div>';
   }
+
+  function initFb() {
+    try {
+      if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+      fbAuth = firebase.auth();
+      fbDb   = firebase.database();
+      window.fbAuth = fbAuth;
+      window.fbDb   = fbDb;
+      fbAuth.onAuthStateChanged(function(user) {
+        if (user) {
+          currentUser = user;
+          window.currentUser = user;
+          fbDb.ref('users/'+user.uid+'/username').once('value').then(function(snap) {
+            currentUsername = snap.val() || 'Player';
+            window.currentUsername = currentUsername;
+            onLoggedIn();
+          });
+        } else {
+          currentUser = null; window.currentUser = null;
+          currentUsername = ''; window.currentUsername = '';
+          onLoggedOut();
+        }
+      });
+    } catch(e) {
+      console.error('Firebase init error:', e);
+      showFbError(e.message);
+    }
+  }
+
+  // Dynamically load scripts in sequence, then init
+  function loadNext(index) {
+    if (index >= SCRIPTS.length) { initFb(); return; }
+    var s = document.createElement('script');
+    s.src = SCRIPTS[index];
+    s.onload = function() { loadNext(index + 1); };
+    s.onerror = function() {
+      showFbError('Could not load Firebase SDK. Make sure you are connected to the internet, then reload.');
+    };
+    document.head.appendChild(s);
+  }
+
+  loadNext(0);
 })();
 </script>
 </body>
